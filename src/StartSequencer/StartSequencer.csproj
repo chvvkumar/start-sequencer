@@ -9,6 +9,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>StartSequencer</AssemblyName>
     <Version>0.1.0</Version>
+    <ApplicationIcon>StartSequencer.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
