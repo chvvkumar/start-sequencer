@@ -19,7 +19,9 @@ public class ProcessRunnerTests
         Assert.Equal(7, r.ExitCode);
     }
 
+    // Needs an interactive desktop: the wait succeeds only when Notepad shows a visible top-level window.
     [Fact]
+    [Trait("Category", "Desktop")]
     public async Task Run_NotepadWindow_SeesWindow_ThenKill()
     {
         var before = System.Diagnostics.Process.GetProcessesByName("notepad").Select(p => p.Id).ToHashSet();

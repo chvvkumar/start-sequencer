@@ -117,6 +117,8 @@ public class MainViewModelTests : IDisposable
         try
         {
             Assert.True(StartSequencer.Discovery.TaskSchedulerSource.CanModify("\\" + name));
+            // An elevated admin (such as a CI runner) can modify Windows tasks, so the deny check only holds unelevated.
+            if (StartSequencer.Sys.ElevatedOps.IsElevated()) return;
             var windowsTask = ts.GetTask(@"\Microsoft\Windows\Defrag\ScheduledDefrag")?.Path
                 ?? ts.AllTasks.First(t => t.Path.StartsWith(@"\Microsoft\Windows\", StringComparison.OrdinalIgnoreCase)).Path;
             Assert.False(StartSequencer.Discovery.TaskSchedulerSource.CanModify(windowsTask));
