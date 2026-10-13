@@ -50,7 +50,15 @@ Remove-Item "$env:TEMP\ss-check.json.result"
 
 Work lands on the `snd` branch, then moves to `dev` and then to `main`. GitHub Actions builds and tests every push and pull request to `snd`. The CI test run skips tests marked with the `Desktop` trait, because they need an interactive desktop session. Run those locally. `dev` and `main` are promotion branches and run no tests.
 
-A push to `main` publishes the single-file exe as a GitHub release. The release tag is `v` followed by the `<Version>` value in `src/StartSequencer/StartSequencer.csproj`, and the attached file is `StartSequencer-v<Version>-win-x64.zip`. If that tag already exists, the job fails and nothing is published.
+Every push to a release branch publishes the single-file exe as a GitHub release. The tag depends on the branch and on the `<Version>` value in `src/StartSequencer/StartSequencer.csproj`:
+
+| Branch | Tag | Marked as |
+|---|---|---|
+| `snd` | `v<Version>-alpha.<run number>` | pre-release, after the tests pass |
+| `dev` | `v<Version>-beta.<run number>` | pre-release |
+| `main` | `v<Version>` | release |
+
+The attached file is `StartSequencer-<tag>-win-x64.zip`. If the tag already exists, the job fails and nothing is published.
 
 To cut a release, raise `<Version>` in `src/StartSequencer/StartSequencer.csproj` on `snd`, let the tests pass, then merge `snd` into `dev` and `dev` into `main`.
 
