@@ -8,14 +8,17 @@ namespace StartSequencer.UI;
 public sealed class StageGroup : INotifyPropertyChanged
 {
     private readonly Action _changed;
+    private readonly HashSet<string> _collapsed;
     private double _endSeconds;
     private int _count;
     private bool _isEditing;
+    private bool _isDropTarget;
 
-    public StageGroup(Stage? stage, Action changed)
+    public StageGroup(Stage? stage, Action changed, HashSet<string> collapsed)
     {
         Stage = stage;
         _changed = changed;
+        _collapsed = collapsed;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -41,6 +44,18 @@ public sealed class StageGroup : INotifyPropertyChanged
 
     public bool IsEditing { get => _isEditing; set { _isEditing = value; Raise(); Raise(nameof(ShowName)); } }
     public bool ShowName => !_isEditing;
+
+    // Collapsed groups are kept by name in a set the view model owns, so they survive a rebuild.
+    public bool IsExpanded
+    {
+        get => !_collapsed.Contains(Name);
+        set { if (value) _collapsed.Remove(Name); else _collapsed.Add(Name); Raise(); Raise(nameof(ChevronGlyph)); }
+    }
+    public string ChevronGlyph => IsExpanded ? "" : "";
+
+    // Stage strip chip under the pointer during a drag.
+    public bool IsDropTarget { get => _isDropTarget; set { if (_isDropTarget == value) return; _isDropTarget = value; Raise(); } }
+    public string ChipTip => IsNative ? "Drop a row here to stop managing it." : "Drop a row here to move it into this stage.";
 
     private void Raise([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }

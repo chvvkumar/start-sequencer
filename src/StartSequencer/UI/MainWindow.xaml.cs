@@ -14,8 +14,8 @@ namespace StartSequencer.UI;
 
 public partial class MainWindow : FluentWindow
 {
-    // Sum of every fixed column plus row chrome; the command column takes the rest.
-    private const double FixedColumns = 160 + 104 + 88 + 56 + 68 + 68 + 150 + 40 + 56 + 68 + 100 + 40 + 40;
+    // Row padding the list item style adds outside the columns (measured 13 DIP), plus rounding at fractional scale.
+    private const double RowChrome = 16;
 
     private readonly MainViewModel _vm;
     private readonly PropertyGroupDescription _grouping = new(nameof(EntryRow.GroupName));
@@ -64,7 +64,8 @@ public partial class MainWindow : FluentWindow
         _vm.StageNames.CollectionChanged += (_, _) => SyncGroups();
         List.ItemsSource = view;
         LayoutUpdated += (_, _) => AlignBootBar();
-        List.SizeChanged += (_, _) => CommandColumn.Width = Math.Max(40, List.ActualWidth - FixedColumns);
+        List.SizeChanged += (_, _) => FitCommandColumn();
+        List.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler((_, e) => { if (e.ViewportWidthChange != 0) FitCommandColumn(); }));
 
         // 36 px rows on top of the container style WPF-UI picks for GridView.
         List.Loaded += (_, _) =>
@@ -77,22 +78,33 @@ public partial class MainWindow : FluentWindow
     // Puts the status line bar under the row bars: same left edge as the Timeline column's cells.
     private void AlignBootBar()
     {
-        var header = FindHeader(List, TimelineColumn);
+        var header = Find<GridViewColumnHeader>(List, h => h.Column == TimelineColumn);
         if (header == null || !header.IsVisible || BootBar.Parent is not FrameworkElement host) return;
         var left = header.TransformToAncestor(this).Transform(new Point(0, 0)).X - host.TransformToAncestor(this).Transform(new Point(0, 0)).X;
         var right = host.ActualWidth - left - 6 - BootBar.Width;   // 6: GridView cell margin
         if (right >= 0 && Math.Abs(BootBar.Margin.Right - right) > 0.5) BootBar.Margin = new Thickness(0, 0, right, 0);
     }
 
-    private static GridViewColumnHeader? FindHeader(DependencyObject root, System.Windows.Controls.GridViewColumn column)
+    private static T? Find<T>(DependencyObject root, Func<T, bool> match) where T : DependencyObject
     {
         for (var i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(root); i++)
         {
             var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
-            if (child is GridViewColumnHeader h && h.Column == column) return h;
-            if (FindHeader(child, column) is { } found) return found;
+            if (child is T t && match(t)) return t;
+            if (Find(child, match) is { } found) return found;
         }
         return null;
+    }
+
+    // The command column takes what the viewport leaves after the fixed columns, so the list never scrolls sideways.
+    private void FitCommandColumn()
+    {
+        // Looked up each time: the list's template is applied again after load. The header row has its own ScrollViewer.
+        var scroll = Find<ScrollViewer>(List, s => s.TemplatedParent == List);
+        if (scroll == null || List.View is not System.Windows.Controls.GridView view) return;
+        var others = view.Columns.Where(c => c != CommandColumn).Sum(c => c.ActualWidth);
+        var width = Math.Max(40, Math.Floor(scroll.ViewportWidth - others - RowChrome));
+        if (Math.Abs(CommandColumn.Width - width) > 0.5) CommandColumn.Width = width;
     }
 
     // Fixed group names keep stage order and show empty stages as drop targets.
@@ -162,6 +174,25 @@ public partial class MainWindow : FluentWindow
 
     // ---- stage headers ----
 
+    private void ColumnHeader_Click(object sender, RoutedEventArgs e)
+    {
+        if (e.OriginalSource is GridViewColumnHeader { Column.Header: string column } && MainViewModel.SortColumns.Contains(column))
+            _vm.SortAll(column);
+    }
+
+    private void Chevron_Click(object sender, RoutedEventArgs e) { if (GroupOf(sender) is { } g) g.IsExpanded = !g.IsExpanded; }
+    private void Rename_Click(object sender, RoutedEventArgs e) { if (GroupOf(sender) is { IsStage: true } g) g.IsEditing = true; }
+
+    // A click on the header background focuses it so F2 reaches it.
+    private void GroupHeader_MouseDown(object sender, MouseButtonEventArgs e) => (sender as UIElement)?.Focus();
+
+    private void GroupHeader_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.F2 || GroupOf(sender) is not { IsStage: true, IsEditing: false } g) return;
+        g.IsEditing = true;
+        e.Handled = true;
+    }
+
     private void StageName_MouseDown(object sender, MouseButtonEventArgs e)
     {
         if (e.ClickCount == 2 && GroupOf(sender) is { IsStage: true } g) g.IsEditing = true;
@@ -179,17 +210,27 @@ public partial class MainWindow : FluentWindow
 
     private void StageEdit_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Enter) CommitRename(sender);
+        if (sender is System.Windows.Controls.TextBox { ToolTip: System.Windows.Controls.ToolTip tip } box) { tip.IsOpen = false; box.ToolTip = RenameTip; }
+        if (e.Key == Key.Enter) CommitRename(sender, keepOpen: true);
         else if (e.Key == Key.Escape && GroupOf(sender) is { } g) g.IsEditing = false;
     }
 
-    private void StageEdit_LostFocus(object sender, KeyboardFocusChangedEventArgs e) => CommitRename(sender);
+    // Leaving the box with a rejected name cancels the edit; Enter keeps the box open.
+    private void StageEdit_LostFocus(object sender, KeyboardFocusChangedEventArgs e) => CommitRename(sender, keepOpen: false);
 
-    private void CommitRename(object sender)
+    private bool _renaming;
+    private const string RenameTip = "Enter to rename, Esc to cancel.";
+
+    private void CommitRename(object sender, bool keepOpen)
     {
-        if (GroupOf(sender) is not { IsEditing: true } g || sender is not System.Windows.Controls.TextBox t) return;
-        g.IsEditing = false;
-        Try(() => _vm.RenameStage(g.Name, t.Text));
+        if (_renaming || GroupOf(sender) is not { IsEditing: true } g || sender is not System.Windows.Controls.TextBox t) return;
+        bool ok;
+        // A successful rename rebuilds the headers, which takes focus from this box and re-enters here.
+        _renaming = true;
+        try { ok = _vm.RenameStage(g.Name, t.Text); }
+        finally { _renaming = false; }
+        if (ok || !keepOpen) { g.IsEditing = false; return; }
+        t.ToolTip = new System.Windows.Controls.ToolTip { Content = "Name is empty or already used", PlacementTarget = t, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom, IsOpen = true };
     }
 
     private void StageUp_Click(object sender, RoutedEventArgs e) { if (GroupOf(sender) is { } g) _vm.MoveStage(g.Name, -1); }

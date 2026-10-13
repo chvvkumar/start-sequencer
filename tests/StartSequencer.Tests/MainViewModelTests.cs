@@ -53,9 +53,50 @@ public class MainViewModelTests : IDisposable
         var vm = Vm();
         var a = Row(vm, "Custom|a");
         vm.Manage(a, "Core", 0);
-        vm.RenameStage("Core", "First");
+        Assert.True(vm.RenameStage("Core", "First"));
         Assert.Equal("First", a.Managed!.Stage);
         Assert.Equal("First", vm.Config.Stages[0].Name);
+        Assert.True(vm.IsDirty);
+    }
+
+    [Fact]
+    public void RenameStage_EmptyOrDuplicate_ReturnsFalse_AndLeavesStage()
+    {
+        var vm = Vm();
+        var a = Row(vm, "Custom|a");
+        vm.Manage(a, "Core", 0);
+        Assert.False(vm.RenameStage("Core", "  "));
+        Assert.False(vm.RenameStage("Core", "Comms"));
+        Assert.False(vm.RenameStage("Core", "comms"));
+        Assert.False(vm.RenameStage("Core", "native"));
+        Assert.Equal("Core", vm.Config.Stages[0].Name);
+        Assert.Equal("Core", a.Managed!.Stage);
+        Assert.Equal(["Core", "Comms", "Background"], vm.StageNames);
+    }
+
+    [Fact]
+    public void RenameStage_CaseOnly_Accepted()
+    {
+        var vm = Vm();
+        Assert.True(vm.RenameStage("Core", "Boot"));
+        Assert.False(vm.RenameStage("Comms", "boot"));
+        Assert.True(vm.RenameStage("Boot", "BOOT"));
+        Assert.Equal("BOOT", vm.Config.Stages[0].Name);
+    }
+
+    [Fact]
+    public void SortGroup_StageByNameDescending_RewritesOrder_AndDirty()
+    {
+        var c = new AppConfig();
+        c.Custom.Add(new CustomEntry { Key = "Custom|a", Name = "A", Path = @"C:\Windows\notepad.exe" });
+        c.Custom.Add(new CustomEntry { Key = "Custom|b", Name = "B", Path = @"C:\Windows\notepad.exe" });
+        c.Managed.Add(new ManagedEntry { Key = "Custom|a", Stage = "Core", Order = 0 });
+        c.Managed.Add(new ManagedEntry { Key = "Custom|b", Stage = "Core", Order = 1 });
+        var vm = new MainViewModel(c);
+        Assert.False(vm.IsDirty);
+        vm.SortGroup("Core", "Name", descending: true);
+        Assert.Equal(1, Row(vm, "Custom|a").Managed!.Order);
+        Assert.Equal(0, Row(vm, "Custom|b").Managed!.Order);
         Assert.True(vm.IsDirty);
     }
 

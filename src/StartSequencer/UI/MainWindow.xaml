@@ -5,7 +5,7 @@
                  xmlns:dd="urn:gong-wpf-dragdrop"
                  xmlns:local="clr-namespace:StartSequencer.UI"
                  Title="StartSequencer"
-                 Width="1200" Height="760" MinWidth="1100" MinHeight="640"
+                 Width="1280" Height="760" MinWidth="1220" MinHeight="640"
                  ExtendsContentIntoTitleBar="True"
                  WindowBackdropType="Mica"
                  WindowStartupLocation="CenterScreen">
@@ -13,6 +13,7 @@
         <BooleanToVisibilityConverter x:Key="Vis" />
         <local:NumberConverter x:Key="Num" />
         <local:GroupLookupConverter x:Key="GroupLookup" />
+        <local:SortGlyphConverter x:Key="SortGlyph" />
         <ContextMenu x:Key="RowMenu" DataContext="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource Self}}">
             <MenuItem Header="Run now" Click="RunNowMenu_Click" />
             <MenuItem Header="Move to Native" Click="UnmanageMenu_Click" IsEnabled="{Binding IsManaged}" />
@@ -40,6 +41,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -56,39 +58,79 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal">
-                <ui:Button Content="Add entry" Click="AddEntry_Click" />
-                <ui:Button Content="Add stage" Margin="8,0,0,0" Click="AddStage_Click" />
-                <ui:Button Content="Rescan" Margin="8,0,0,0" Click="Rescan_Click" />
+                <ui:Button Content="Add entry" Click="AddEntry_Click" ToolTip="Add a program, shortcut or script to a stage." />
+                <ui:Button Content="Add stage" Margin="8,0,0,0" Click="AddStage_Click" ToolTip="Add a stage. Stages run in order." />
+                <ui:Button Content="Rescan" Margin="8,0,0,0" Click="Rescan_Click" ToolTip="Read all startup sources again. Unsaved edits are kept." />
             </StackPanel>
             <StackPanel Grid.Column="2" Orientation="Horizontal">
                 <Grid>
-                    <ui:Button Content="Settings" Click="Settings_Click" />
+                    <ui:Button Content="Settings" Click="Settings_Click" ToolTip="Delay, countdown, Windows tasks, export, import, uninstall." />
                     <!-- Opens below the button, right-aligned with it, so it stays inside the window. -->
                     <ui:Flyout x:Name="SettingsFlyout" Placement="Left" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,40,0,-40">
                         <StackPanel Width="260">
                             <TextBlock Text="Delay after logon (s)" FontSize="14" Margin="0,0,0,4"
                                        Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
                             <ui:NumberBox Value="{Binding GlobalDelaySeconds, Converter={StaticResource Num}}" Minimum="0" Maximum="3600"
-                                          MaxDecimalPlaces="0" ClearButtonEnabled="False" />
+                                          MaxDecimalPlaces="0" ClearButtonEnabled="False"
+                                          ToolTip="Seconds after logon before the first stage starts." />
                             <TextBlock Text="Ask countdown (s)" FontSize="14" Margin="0,12,0,4"
                                        Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
                             <ui:NumberBox Value="{Binding AskCountdownSeconds, Converter={StaticResource Num}}" Minimum="1" Maximum="600"
-                                          MaxDecimalPlaces="0" ClearButtonEnabled="False" />
+                                          MaxDecimalPlaces="0" ClearButtonEnabled="False"
+                                          ToolTip="Seconds before the logon dialog applies the defaults." />
                             <CheckBox Content="Show Windows tasks" IsChecked="{Binding ShowWindowsTasks}" Margin="0,12,0,0"
                                       ToolTip="Tasks under \Microsoft\ are shown read only" />
                             <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
-                                <ui:Button Content="Export" Click="Export_Click" />
-                                <ui:Button Content="Import" Margin="8,0,0,0" Click="Import_Click" />
+                                <ui:Button Content="Export" Click="Export_Click" ToolTip="Write the config to a JSON file." />
+                                <ui:Button Content="Import" Margin="8,0,0,0" Click="Import_Click" ToolTip="Read a config from a JSON file. Applies on Save." />
                             </StackPanel>
-                            <ui:Button Content="Uninstall and restore" Margin="0,8,0,0" Click="Uninstall_Click" />
+                            <ui:Button Content="Uninstall and restore" Margin="0,8,0,0" Click="Uninstall_Click"
+                                       ToolTip="Restore every source to its recorded state and remove the scheduled tasks." />
                         </StackPanel>
                     </ui:Flyout>
                 </Grid>
             </StackPanel>
         </Grid>
 
+        <!-- Stage strip: one drop target per stage plus Native, visible while the list scrolls. -->
+        <ScrollViewer Grid.Row="2" Margin="12,0,12,8" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
+                      Visibility="{Binding HasStages, Converter={StaticResource Vis}}">
+            <ItemsControl x:Name="Strip" ItemsSource="{Binding StripGroups}" Height="36">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Tag="{Binding Name}" ToolTip="{Binding ChipTip}" Height="32" Margin="0,0,8,0" Padding="12,0"
+                                CornerRadius="4" BorderThickness="1"
+                                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                                dd:DragDrop.IsDropTarget="True"
+                                dd:DragDrop.DropHandler="{Binding DataContext, ElementName=Strip}">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
+                                            <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Name}" FontSize="14" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                                <TextBlock Text="{Binding Count}" Style="{StaticResource Caption}" Margin="8,0,0,0" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
         <!-- Grouped list -->
-        <ui:ListView x:Name="List" Grid.Row="2" Margin="12,0,12,0"
+        <ui:ListView x:Name="List" Grid.Row="3" Margin="12,0,12,0"
                      SelectionMode="Single"
                      VirtualizingPanel.IsVirtualizingWhenGrouping="True"
                      VirtualizingPanel.ScrollUnit="Pixel"
@@ -96,19 +138,47 @@
                      dd:DragDrop.IsDropTarget="True"
                      dd:DragDrop.DropHandler="{Binding}"
                      dd:DragDrop.UseDefaultDragAdorner="True"
+                     GridViewColumnHeader.Click="ColumnHeader_Click"
                      ContextMenu="{StaticResource RowMenu}">
 
             <ui:ListView.GroupStyle>
                 <GroupStyle HidesIfEmpty="False">
+                    <!-- Header, then the rows; the rows hide while the group is collapsed. The header stays a drop target. -->
+                    <GroupStyle.ContainerStyle>
+                        <Style TargetType="GroupItem">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="GroupItem">
+                                        <StackPanel>
+                                            <ContentPresenter />
+                                            <Grid DataContext="{Binding Name, Converter={StaticResource GroupLookup}}"
+                                                  Visibility="{Binding IsExpanded, Converter={StaticResource Vis}}">
+                                                <ItemsPresenter />
+                                            </Grid>
+                                        </StackPanel>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </GroupStyle.ContainerStyle>
                     <GroupStyle.HeaderTemplate>
                         <DataTemplate>
                             <Border DataContext="{Binding Name, Converter={StaticResource GroupLookup}}"
                                     Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
                                     BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
-                                    BorderThickness="0,0,0,1" Padding="12,0" Margin="0,8,0,0" MinHeight="40">
+                                    BorderThickness="0,0,0,1" Padding="4,0,12,0" Margin="0,8,0,0" MinHeight="40"
+                                    Focusable="True" KeyDown="GroupHeader_KeyDown" MouseLeftButtonDown="GroupHeader_MouseDown">
                                 <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <ui:Button Appearance="Transparent" Padding="8" Margin="0,0,4,0" VerticalAlignment="Center"
+                                               Click="Chevron_Click" ToolTip="Collapse or expand.">
+                                        <ui:FontIcon Glyph="{Binding ChevronGlyph}" FontFamily="Segoe Fluent Icons" FontSize="12" />
+                                    </ui:Button>
                                     <!-- Stage header -->
-                                    <Grid Visibility="{Binding IsStage, Converter={StaticResource Vis}}">
+                                    <Grid Grid.Column="1" Visibility="{Binding IsStage, Converter={StaticResource Vis}}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
@@ -117,34 +187,42 @@
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <Grid VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold" MinWidth="80"
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"
                                                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                                                        Background="Transparent"
-                                                       ToolTip="Double-click to rename"
+                                                       ToolTip="Double-click or F2 to rename"
                                                        Visibility="{Binding ShowName, Converter={StaticResource Vis}}"
                                                        MouseLeftButtonDown="StageName_MouseDown" />
+                                            <ui:Button Appearance="Transparent" Padding="8" Margin="4,0,0,0" VerticalAlignment="Center"
+                                                       Click="Rename_Click" ToolTip="Rename this stage."
+                                                       Visibility="{Binding ShowName, Converter={StaticResource Vis}}">
+                                                <ui:FontIcon Glyph="&#xE70F;" FontFamily="Segoe Fluent Icons" FontSize="12" />
+                                            </ui:Button>
                                             <ui:TextBox Text="{Binding Name, Mode=OneWay}" MinWidth="160" Padding="8,4"
+                                                        ToolTip="Enter to rename, Esc to cancel."
                                                         Visibility="{Binding IsEditing, Converter={StaticResource Vis}}"
                                                         IsVisibleChanged="StageEdit_IsVisibleChanged"
                                                         KeyDown="StageEdit_KeyDown" LostKeyboardFocus="StageEdit_LostFocus" />
-                                        </Grid>
+                                        </StackPanel>
                                         <TextBlock Grid.Column="1" Text="{Binding CountText}" Style="{StaticResource Caption}" Margin="12,0,0,0" />
                                         <ui:ToggleSwitch Grid.Column="3" Content="Ask at logon" IsChecked="{Binding Ask}" VerticalAlignment="Center"
-                                                         ToolTip="Show this stage as one choice in the logon dialog" />
+                                                         ToolTip="Ask at logon for the whole stage." />
                                         <TextBlock Grid.Column="4" Text="{Binding EndText}" Style="{StaticResource Caption}" Margin="24,0,0,0"
                                                    MinWidth="48" TextAlignment="Right"
-                                                   ToolTip="Planned seconds after logon when this stage is done" />
+                                                   ToolTip="Planned time from logon until this stage ends." />
                                         <StackPanel Grid.Column="5" Orientation="Horizontal" Margin="16,0,0,0">
-                                            <ui:Button Content="Move up" Appearance="Transparent" Padding="8,2" FontSize="12" Click="StageUp_Click" />
-                                            <ui:Button Content="Move down" Appearance="Transparent" Padding="8,2" FontSize="12" Margin="4,0,0,0" Click="StageDown_Click" />
+                                            <ui:Button Content="Move up" Appearance="Transparent" Padding="8,2" FontSize="12" Click="StageUp_Click"
+                                                       ToolTip="Change stage order." />
+                                            <ui:Button Content="Move down" Appearance="Transparent" Padding="8,2" FontSize="12" Margin="4,0,0,0" Click="StageDown_Click"
+                                                       ToolTip="Change stage order." />
                                             <ui:Button Content="Delete" Appearance="Transparent" Padding="8,2" FontSize="12" Margin="4,0,0,0" Click="StageDelete_Click"
                                                        IsEnabled="{Binding CanDelete}"
-                                                       ToolTipService.ShowOnDisabled="True" ToolTip="Only an empty stage can be deleted" />
+                                                       ToolTipService.ShowOnDisabled="True" ToolTip="Delete this stage. Only empty stages can be deleted." />
                                         </StackPanel>
                                     </Grid>
                                     <!-- Native header -->
-                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
                                                 Visibility="{Binding IsNative, Converter={StaticResource Vis}}">
                                         <TextBlock Text="Native" FontSize="14" FontWeight="SemiBold"
                                                    Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
@@ -160,7 +238,29 @@
 
             <ui:ListView.View>
                 <ui:GridView>
-                    <ui:GridViewColumn Header="Name" Width="160">
+                    <!-- Header text plus the sort glyph on the sorted column; the column's ToolTip shows on its whole header. -->
+                    <ui:GridView.ColumnHeaderContainerStyle>
+                        <Style TargetType="GridViewColumnHeader" BasedOn="{StaticResource UiGridViewColumnHeaderStyle}">
+                            <Setter Property="ToolTip" Value="{Binding Column.(ToolTipService.ToolTip), RelativeSource={RelativeSource Self}}" />
+                        </Style>
+                    </ui:GridView.ColumnHeaderContainerStyle>
+                    <ui:GridView.ColumnHeaderTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding}" VerticalAlignment="Center" />
+                                <TextBlock FontFamily="Segoe Fluent Icons" FontSize="10" Margin="4,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock.Text>
+                                        <MultiBinding Converter="{StaticResource SortGlyph}">
+                                            <Binding />
+                                            <Binding Path="DataContext.SortColumn" RelativeSource="{RelativeSource AncestorType=ListView}" />
+                                            <Binding Path="DataContext.SortDescending" RelativeSource="{RelativeSource AncestorType=ListView}" />
+                                        </MultiBinding>
+                                    </TextBlock.Text>
+                                </TextBlock>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ui:GridView.ColumnHeaderTemplate>
+                    <ui:GridViewColumn Header="Name" Width="140" ToolTipService.ToolTip="Click to sort within each group.">
                         <ui:GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <Grid ToolTip="{Binding Entry.Name}">
@@ -180,7 +280,7 @@
                             </DataTemplate>
                         </ui:GridViewColumn.CellTemplate>
                     </ui:GridViewColumn>
-                    <ui:GridViewColumn Header="Publisher" Width="104">
+                    <ui:GridViewColumn Header="Publisher" Width="88" ToolTipService.ToolTip="Company name from the program file.">
                         <ui:GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding Entry.Publisher}" ToolTip="{Binding Entry.Publisher}" Style="{StaticResource Caption}"
@@ -188,7 +288,7 @@
                             </DataTemplate>
                         </ui:GridViewColumn.CellTemplate>
                     </ui:GridViewColumn>
-                    <ui:GridViewColumn Header="Source" Width="88">
+                    <ui:GridViewColumn Header="Source" Width="88" ToolTipService.ToolTip="Where Windows reads this entry.">
                         <ui:GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal" ToolTip="{Binding Entry.Location}">
@@ -199,7 +299,7 @@
                             </DataTemplate>
                         </ui:GridViewColumn.CellTemplate>
                     </ui:GridViewColumn>
-                    <ui:GridViewColumn x:Name="CommandColumn" Header="Command" Width="120">
+                    <ui:GridViewColumn x:Name="CommandColumn" Header="Command" Width="120" ToolTipService.ToolTip="Command line as stored at the source.">
                         <ui:GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding Entry.Command}" ToolTip="{Binding CommandTip}" Style="{StaticResource Caption}"
@@ -207,7 +307,7 @@
                             </DataTemplate>
                         </ui:GridViewColumn.CellTemplate>
                     </ui:GridViewColumn>
-                    <ui:GridViewColumn Header="On" Width="56">
+                    <ui:GridViewColumn Header="On" Width="56" ToolTipService.ToolTip="Enabled at the source. Managed entries are disabled at the source and started by the launcher.">
                         <ui:GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <ui:ToggleSwitch IsChecked="{Binding Enabled}" IsEnabled="{Binding CanToggle}" VerticalAlignment="Center"
@@ -215,33 +315,33 @@
                             </DataTemplate>
                         </ui:GridViewColumn.CellTemplate>
                     </ui:GridViewColumn>
-                    <ui:GridViewColumn Header="Delay s" Width="68">
+                    <ui:GridViewColumn Header="Delay s" Width="68" ToolTipService.ToolTip="Seconds to wait before starting this entry.">
                         <ui:GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <ui:NumberBox Style="{StaticResource CellNumber}" Maximum="3600"
                                               Value="{Binding DelaySeconds, Converter={StaticResource Num}}"
                                               Visibility="{Binding IsManaged, Converter={StaticResource Vis}}"
-                                              ToolTip="Seconds to wait before starting this entry" />
+                                              ToolTip="Seconds before start." />
                             </DataTemplate>
                         </ui:GridViewColumn.CellTemplate>
                     </ui:GridViewColumn>
-                    <ui:GridViewColumn Header="CPU &lt; %" Width="68">
+                    <ui:GridViewColumn Header="CPU &lt; %" Width="68" ToolTipService.ToolTip="Start only when CPU use drops below this value, or after the cap.">
                         <ui:GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <ui:NumberBox Style="{StaticResource CellNumber}" Minimum="1" Maximum="100"
                                               Value="{Binding CpuBelowPercent, Converter={StaticResource Num}}"
                                               Visibility="{Binding IsManaged, Converter={StaticResource Vis}}"
-                                              ToolTip="Start when CPU use is below this percent. Empty means no CPU check." />
+                                              ToolTip="CPU threshold in percent. Empty means no CPU wait." />
                             </DataTemplate>
                         </ui:GridViewColumn.CellTemplate>
                     </ui:GridViewColumn>
-                    <ui:GridViewColumn Header="Wait" Width="150">
+                    <ui:GridViewColumn Header="Wait" Width="140" ToolTipService.ToolTip="What the launcher waits for after starting this entry.">
                         <ui:GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal" Visibility="{Binding IsManaged, Converter={StaticResource Vis}}">
-                                    <ComboBox ItemsSource="{Binding WaitModes}" SelectedItem="{Binding Wait}" Width="86" MinHeight="28"
+                                    <ComboBox ItemsSource="{Binding WaitModes}" SelectedItem="{Binding Wait}" Width="80" MinHeight="28"
                                               Padding="8,4" VerticalAlignment="Center"
-                                              ToolTip="What to wait for before the next entry starts" />
+                                              ToolTip="None, fixed seconds, main window visible, or process exit." />
                                     <ui:NumberBox Style="{StaticResource CellNumber}" Width="56" Margin="4,0,0,0"
                                                   Value="{Binding WaitValue, Converter={StaticResource Num}}"
                                                   Visibility="{Binding HasWaitValue, Converter={StaticResource Vis}}"
@@ -250,36 +350,33 @@
                             </DataTemplate>
                         </ui:GridViewColumn.CellTemplate>
                     </ui:GridViewColumn>
-                    <ui:GridViewColumn Header="Ask" Width="40">
+                    <ui:GridViewColumn Header="Ask" Width="40" ToolTipService.ToolTip="Ask at logon before starting this entry.">
                         <ui:GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <CheckBox IsChecked="{Binding Ask}" MinWidth="0" Width="24" Padding="0" HorizontalAlignment="Left" Visibility="{Binding IsManaged, Converter={StaticResource Vis}}"
-                                          ToolTip="Ask at logon whether to start this entry" />
+                                          ToolTip="Ask at logon." />
                             </DataTemplate>
                         </ui:GridViewColumn.CellTemplate>
                     </ui:GridViewColumn>
-                    <ui:GridViewColumn Header="Admin" Width="56">
+                    <ui:GridViewColumn Header="Admin" Width="56" ToolTipService.ToolTip="Start as administrator through a scheduled task. No prompt at logon.">
                         <ui:GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <CheckBox IsChecked="{Binding Elevated}" MinWidth="0" Width="24" Padding="0" HorizontalAlignment="Left" Visibility="{Binding IsManaged, Converter={StaticResource Vis}}"
-                                          ToolTip="Run as administrator through a scheduled task. Saving asks for administrator approval." />
+                                          ToolTip="Run as administrator." />
                             </DataTemplate>
                         </ui:GridViewColumn.CellTemplate>
                     </ui:GridViewColumn>
-                    <ui:GridViewColumn Width="68">
-                        <ui:GridViewColumn.Header>
-                            <TextBlock Text="Last run" ToolTip="Launches by this app and Task Scheduler. Windows does not record launches of Run and startup folder entries." />
-                        </ui:GridViewColumn.Header>
+                    <ui:GridViewColumn Header="Last run" Width="80" ToolTipService.ToolTip="Last start recorded by this app or by Task Scheduler.">
                         <ui:GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding LastRunText}" Style="{StaticResource Caption}" />
                             </DataTemplate>
                         </ui:GridViewColumn.CellTemplate>
                     </ui:GridViewColumn>
-                    <ui:GridViewColumn x:Name="TimelineColumn" Header="Timeline" Width="100">
+                    <ui:GridViewColumn x:Name="TimelineColumn" Header="Timeline" Width="92" ToolTipService.ToolTip="Planned start offset and last boot's actual start.">
                         <ui:GridViewColumn.CellTemplate>
                             <DataTemplate>
-                                <local:TimelineBar Width="84" Height="14"
+                                <local:TimelineBar Width="76" Height="14"
                                                    TotalSeconds="{Binding DataContext.TimelineTotalSeconds, RelativeSource={RelativeSource AncestorType=ListView}}"
                                                    PlannedOffset="{Binding PlannedOffset}"
                                                    ActualOffset="{Binding ActualOffset}"
@@ -292,7 +389,7 @@
                     <ui:GridViewColumn Header="" Width="40">
                         <ui:GridViewColumn.CellTemplate>
                             <DataTemplate>
-                                <ui:Button Appearance="Transparent" Padding="6" Click="RunNow_Click" ToolTip="Run now">
+                                <ui:Button Appearance="Transparent" Padding="6" Click="RunNow_Click" ToolTip="Start this entry now. Changes nothing.">
                                     <ui:FontIcon Glyph="&#xE768;" FontFamily="Segoe Fluent Icons" FontSize="14" />
                                 </ui:Button>
                             </DataTemplate>
@@ -302,13 +399,13 @@
             </ui:ListView.View>
         </ui:ListView>
 
-        <TextBlock Grid.Row="2" Text="No startup entries found. Use Add entry to add one." FontSize="14"
+        <TextBlock Grid.Row="3" Text="No startup entries found. Use Add entry to add one." FontSize="14"
                    HorizontalAlignment="Center" VerticalAlignment="Center"
                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                    Visibility="{Binding IsEmpty, Converter={StaticResource Vis}}" />
 
         <!-- Messages -->
-        <StackPanel Grid.Row="3" Margin="12,8,12,0">
+        <StackPanel Grid.Row="4" Margin="12,8,12,0">
             <ui:InfoBar x:Name="SaveErrors" Title="Save did not complete" Severity="Error" IsClosable="True" />
             <ui:InfoBar Title="Some sources could not be read" Severity="Warning" IsClosable="True"
                         Message="{Binding ScanErrorText}" IsOpen="{Binding HasScanErrors, Mode=OneWay}" />
@@ -317,18 +414,20 @@
         </StackPanel>
 
         <!-- Save bar -->
-        <Border Grid.Row="4" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="0,1,0,0"
+        <Border Grid.Row="5" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="0,1,0,0"
                 Padding="12,8" Visibility="{Binding IsDirty, Converter={StaticResource Vis}}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <TextBlock Text="{Binding DirtyText}" FontSize="14" VerticalAlignment="Center" Margin="0,0,16,0"
                            Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
-                <ui:Button Content="Save" Appearance="Primary" MinWidth="88" Click="Save_Click" />
-                <ui:Button Content="Discard" MinWidth="88" Margin="8,0,0,0" Click="Discard_Click" />
+                <ui:Button Content="Save" Appearance="Primary" MinWidth="88" Click="Save_Click"
+                           ToolTip="Write config and apply changes at the sources." />
+                <ui:Button Content="Discard" MinWidth="88" Margin="8,0,0,0" Click="Discard_Click"
+                           ToolTip="Drop unsaved changes." />
             </StackPanel>
         </Border>
 
         <!-- Status line: last boot on the same axis as the rows -->
-        <Border Grid.Row="5" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="0,1,0,0" Padding="24,8,12,8">
+        <Border Grid.Row="6" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="0,1,0,0" Padding="24,8,12,8">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -338,9 +437,9 @@
                 <TextBlock Text="{Binding StatusLine}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis"
                            ToolTip="{Binding StatusLine}" />
                 <TextBlock Grid.Column="1" Style="{StaticResource Caption}" Margin="16,0,16,0">
-                    <Hyperlink Click="OpenLogs_Click" Foreground="{DynamicResource TextFillColorSecondaryBrush}">Open log folder</Hyperlink>
+                    <Hyperlink Click="OpenLogs_Click" ToolTip="Open the folder with boot logs." Foreground="{DynamicResource TextFillColorSecondaryBrush}">Open log folder</Hyperlink>
                 </TextBlock>
-                <local:TimelineBar x:Name="BootBar" Grid.Column="2" Width="84" Height="14" Margin="0,0,54,0"
+                <local:TimelineBar x:Name="BootBar" Grid.Column="2" Width="76" Height="14" Margin="0,0,54,0"
                                    TotalSeconds="{Binding TimelineTotalSeconds}"
                                    PlannedOffset="{Binding PlannedTotalSeconds}"
                                    ActualOffset="{Binding BootActualSeconds}"

@@ -27,3 +27,12 @@ public sealed class GroupLookupConverter : IValueConverter
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
 }
+
+// Column header sort glyph: values are the header text, the sorted column and whether it is descending.
+public sealed class SortGlyphConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object? parameter, CultureInfo culture) =>
+        values is [string header, string column, bool descending] && header == column ? (descending ? "" : "") : "";
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object? parameter, CultureInfo culture) => [];
+}

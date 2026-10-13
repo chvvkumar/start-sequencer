@@ -101,7 +101,7 @@ public sealed class EntryRow : INotifyPropertyChanged
         : Entry.Source == EntrySource.Task && !Entry.CanSequence ? "Task has no single program action"
         : Entry.Source == EntrySource.Custom && !IsManaged ? "Added entries run only from a stage"
         : IsManaged ? "Start this entry in the sequence"
-        : "Let Windows start this entry at logon";
+        : "Enable or disable at the source.";
 
     public string LastRunText => Entry.LastRun is { } t ? t.ToString("MMM d HH:mm") : "";
 
