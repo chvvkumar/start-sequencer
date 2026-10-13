@@ -1,0 +1,84 @@
+name: ci
+
+on:
+  push:
+    branches: [snd, dev, main]
+  pull_request:
+    branches: [snd]
+
+jobs:
+  test:
+    if: github.ref == 'refs/heads/snd' || github.base_ref == 'snd'
+    # Tests run only for snd. dev and main are promotion branches.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore
+        run: dotnet restore tests/StartSequencer.Tests
+      - name: Build
+        # The test project references src/StartSequencer, so this builds both.
+        run: dotnet build tests/StartSequencer.Tests -c Release --no-restore
+      - name: Test
+        run: dotnet test tests/StartSequencer.Tests -c Release --no-build --logger trx --filter "Category!=Desktop"
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: tests/StartSequencer.Tests/TestResults/*.trx
+
+  release:
+    # snd publishes alpha pre-releases, dev beta pre-releases, main the final release.
+    # On snd the test job must pass first; on dev and main it is skipped.
+    needs: test
+    if: >-
+      !cancelled() && github.event_name == 'push' &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped')
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    # Queue release runs so a second run sees the tag created by the first and fails.
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore
+        run: dotnet restore src/StartSequencer -r win-x64
+      - name: Read version
+        id: version
+        run: |
+          $v = "$(([xml](Get-Content src/StartSequencer/StartSequencer.csproj)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1)".Trim()
+          if ($v -notmatch '^\d+\.\d+\.\d+$') { Write-Error "<Version> in src/StartSequencer/StartSequencer.csproj is '$v'; expected MAJOR.MINOR.PATCH such as 0.1.0"; exit 1 }
+          $tag = switch ("${{ github.ref_name }}") {
+            "snd"  { "v$v-alpha.${{ github.run_number }}" }
+            "dev"  { "v$v-beta.${{ github.run_number }}" }
+            "main" { "v$v" }
+            default { Write-Error "No release rule for branch ${{ github.ref_name }}"; exit 1 }
+          }
+          $existing = git ls-remote --tags origin "refs/tags/$tag"
+          if ($LASTEXITCODE -ne 0) { Write-Error "git ls-remote failed"; exit 1 }
+          if ($existing) { Write-Error "Tag $tag already exists on origin. Bump <Version> in src/StartSequencer/StartSequencer.csproj on snd and promote again."; exit 1 }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "prerelease=$(if ('${{ github.ref_name }}' -eq 'main') { 'false' } else { 'true' })" >> $env:GITHUB_OUTPUT
+      - name: Publish
+        run: dotnet publish src/StartSequencer -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true --no-restore -o publish
+      - name: Zip
+        run: Compress-Archive -Path publish/StartSequencer.exe -DestinationPath "StartSequencer-${{ steps.version.outputs.tag }}-win-x64.zip"
+      - name: Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ steps.version.outputs.tag }}
+          prerelease: ${{ steps.version.outputs.prerelease }}
+          body: "StartSequencer ${{ steps.version.outputs.tag }} from branch ${{ github.ref_name }}. Requirements: https://github.com/chvvkumar/start-sequencer#requirements"
+          files: StartSequencer-${{ steps.version.outputs.tag }}-win-x64.zip
+          fail_on_unmatched_files: true

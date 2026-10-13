@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>StartSequencer</AssemblyName>
+    <Version>0.1.0</Version>
+    <ApplicationIcon>StartSequencer.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="System.IO" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="gong-wpf-dragdrop" Version="4.0.0" />
+    <PackageReference Include="TaskScheduler" Version="2.12.2" />
+    <PackageReference Include="WPF-UI" Version="4.3.0" />
+  </ItemGroup>
+
+</Project>
