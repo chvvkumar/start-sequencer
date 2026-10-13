@@ -1,6 +1,61 @@
-# StartSequencer
+<p align="center">
+  <img src="src/StartSequencer/StartSequencer.svg" width="112" alt="StartSequencer logo">
+</p>
 
-StartSequencer is a Windows 11 startup manager built with WPF on .NET 10. It lists every program that runs at logon from the registry Run keys, the two Startup folders, Task Scheduler logon tasks and Microsoft Store startup tasks, in one window. It enables and disables entries through the same switches Task Manager uses, and it can take entries over and start them itself in a set order, with per-entry delays, a CPU gate, wait conditions, an optional dialog at logon and per-entry elevation. Each logon run writes a JSON log.
+<h1 align="center">StartSequencer</h1>
+
+<p align="center">
+  A startup manager for Windows 11 that starts your logon programs in the order you choose.
+</p>
+
+<p align="center">
+  <a href="https://github.com/chvvkumar/start-sequencer/actions/workflows/ci.yml"><img src="https://github.com/chvvkumar/start-sequencer/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/chvvkumar/start-sequencer/releases"><img src="https://img.shields.io/github/v/release/chvvkumar/start-sequencer?include_prereleases" alt="Release"></a>
+  <img src="https://img.shields.io/badge/platform-Windows%2011%20x64-0078D4" alt="Windows 11 x64">
+  <img src="https://img.shields.io/badge/.NET-10-512BD4" alt=".NET 10">
+</p>
+
+Windows starts every logon program at once. StartSequencer lists them all in one window, from the registry Run keys, the two Startup folders, Task Scheduler logon tasks and Microsoft Store startup tasks. It enables and disables entries through the same switches Task Manager uses. Drag an entry into a stage and StartSequencer takes it over: at logon it starts the stage's entries one after another, with per-entry delays, a CPU gate, wait conditions, an optional confirmation dialog and per-entry elevation. Each logon run writes a JSON log, so you can see what started when.
+
+![StartSequencer main window](docs/screenshots/main.png)
+
+## Features
+
+- One list of every logon program, grouped by stage, with icon, publisher, source and command line.
+- Enable and disable entries with the switches Windows itself uses (`StartupApproved`, task enabled flag, Store `State`). Nothing is deleted or rewritten.
+- Stages run in order. Within a stage, entries run top to bottom.
+- Per entry: delay in seconds, start only when CPU use drops below a threshold, wait for a window or for exit before the next entry, ask at logon, run elevated.
+- Ask dialog at logon with a countdown. Stays on top without stealing focus from a fullscreen game or video.
+- Elevated entries run through a per-entry scheduled task, so no UAC prompt appears at logon.
+- Add your own programs, shortcuts, batch files and PowerShell scripts.
+- Timeline bar per entry and per boot, fed by a JSON boot log kept for the last 30 logons.
+- Explicit Save. Nothing changes on the system until you click Save, and changes under HKLM go through one UAC prompt.
+- Export and import the configuration as JSON.
+- Uninstall restores every entry to the state it had when the app first saw it.
+
+## Getting started
+
+Download `StartSequencer-<version>-win-x64.zip` from the [releases page](https://github.com/chvvkumar/start-sequencer/releases), unzip it to a permanent folder and run `StartSequencer.exe`. The exe needs the .NET 10 Desktop Runtime, see [Requirements](#requirements).
+
+> [!IMPORTANT]
+> Keep the exe where you first ran it. The logon task stores the exe's full path. If you move the exe, open the main window once from the new location and the task is re-registered.
+
+Then:
+
+1. Click **Add stage** and name it. Add more stages for groups that should start later.
+2. Drag rows from **Native** into a stage. The app disables the entry at its source so Windows does not also start it, and starts it itself from now on.
+3. Set a delay, a CPU threshold or a wait mode per entry, and turn on **Ask** for entries you want to confirm at logon.
+4. Click **Save**. Changes under HKLM or to protected tasks bring up one UAC prompt.
+5. Sign out and back in. The status line at the bottom shows the last boot log.
+
+To add something that is not a startup entry yet, click **Add entry**:
+
+<p align="center">
+  <img src="docs/screenshots/add-entry.png" width="520" alt="Add entry dialog">
+</p>
+
+> [!NOTE]
+> Store apps can be enabled, disabled and run now, but not sequenced. See [Limitations](#limitations).
 
 ## Requirements
 
